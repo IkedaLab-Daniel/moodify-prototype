@@ -60,7 +60,9 @@ ROOT_URLCONF = 'moodify.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'frontend' / 'dist'],
+        'DIRS': [
+            os.path.join(BASE_DIR, 'frontend/dist'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -132,5 +134,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True
 
 STATICFILES_DIRS = [
-    BASE_DIR / 'frontend' / 'dist',  # Point to the dist folder directly
+    os.path.join(BASE_DIR, 'frontend/dist'),
 ]
