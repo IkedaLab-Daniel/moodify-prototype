@@ -1,14 +1,17 @@
+# views.py
 import requests
-import json
-from django.views import View
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 
-@method_decorator(csrf_exempt, name='dispatch')
-class AnalyzeSentimentView(View):
+class SentimentAnalysisView(APIView):
     def post(self, request):
-        data = json.loads(request.body)
-        text = data.get('text')
-        resp = requests.post('http://sentiment:5000/analyze', json={'text': text})
-        return JsonResponse(resp.json())
+        user_text = request.data.get("text")
+        flask_url = "http://localhost:5000/predict"
+
+        try:
+            flask_response = requests.post(flask_url, json={"text": user_text})
+            return Response(flask_response.json(), status=flask_response.status_code)
+        
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
