@@ -1,6 +1,18 @@
 from textblob import TextBlob
 import math
 import re
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Initialize OpenRouter client
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
 
 def analyze_sentiment(text):
     blob = TextBlob(text)
@@ -45,42 +57,9 @@ def analyze_sentiment(text):
     }
 
 def moodify_text(text, target_sentiment):
-    """Transform text to match the target sentiment"""
+    """Transform text to match the target sentiment using LLM"""
     
-    # Define word mappings for sentiment transformation
-    positive_words = {
-        'bad': 'good', 'terrible': 'wonderful', 'awful': 'amazing', 
-        'hate': 'love', 'dislike': 'like', 'horrible': 'fantastic',
-        'disappointed': 'pleased', 'frustrated': 'satisfied', 
-        'angry': 'happy', 'sad': 'joyful', 'upset': 'delighted',
-        'worst': 'best', 'failed': 'succeeded', 'problem': 'opportunity',
-        'difficult': 'easy', 'hard': 'simple', 'boring': 'exciting',
-        'ugly': 'beautiful', 'stupid': 'smart', 'wrong': 'right'
-    }
-    
-    negative_words = {
-        'good': 'bad', 'wonderful': 'terrible', 'amazing': 'awful',
-        'love': 'hate', 'like': 'dislike', 'fantastic': 'horrible',
-        'pleased': 'disappointed', 'satisfied': 'frustrated',
-        'happy': 'angry', 'joyful': 'sad', 'delighted': 'upset',
-        'best': 'worst', 'succeeded': 'failed', 'opportunity': 'problem',
-        'easy': 'difficult', 'simple': 'hard', 'exciting': 'boring',
-        'beautiful': 'ugly', 'smart': 'stupid', 'right': 'wrong'
-    }
-    
-    neutral_words = {
-        'love': 'like', 'hate': 'dislike', 'amazing': 'okay',
-        'terrible': 'mediocre', 'wonderful': 'decent', 'awful': 'poor',
-        'fantastic': 'fine', 'horrible': 'average', 'best': 'okay',
-        'worst': 'poor', 'excited': 'interested', 'furious': 'annoyed'
-    }
-    
-    # Sentiment modifiers
-    positive_modifiers = ['really', 'very', 'extremely', 'absolutely', 'incredibly']
-    negative_modifiers = ['barely', 'hardly', 'somewhat', 'slightly', 'kind of']
-    neutral_modifiers = ['quite', 'fairly', 'reasonably', 'moderately']
-    
-    modified_text = text
+    # Get original sentiment
     original_sentiment = analyze_sentiment(text)['sentiment']
     
     # If already the target sentiment, return original with note
@@ -90,72 +69,156 @@ def moodify_text(text, target_sentiment):
             "modified_text": text,
             "target_sentiment": target_sentiment,
             "original_sentiment": original_sentiment,
+            "new_sentiment": original_sentiment,
             "changes_made": [],
+            "success": True,
             "message": f"Text is already {target_sentiment}! No changes needed."
         }
     
-    changes_made = []
+    # Create prompt for LLM
+    prompt = f"""
+Transform the following text to have a {target_sentiment} sentiment while preserving the core meaning and context. 
+Keep the transformation natural and realistic.
+
+Original text: "{text}"
+Target sentiment: {target_sentiment}
+
+Requirements:
+1. Keep the same general topic and context
+2. Make it sound natural and authentic
+3. Don't change the fundamental message, just the emotional tone
+4. Keep similar length and structure
+
+Transformed text:"""
+
+    try:
+        # Call OpenRouter API with DeepSeek model
+        response = client.chat.completions.create(
+            model="deepseek/deepseek-chat-v3-0324:free",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are an expert at transforming text sentiment while preserving meaning. Always respond with just the transformed text, no explanations or quotes."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            max_tokens=150,
+            temperature=0.7
+        )
+        
+        # ! Debug: Print the full response for inspection
+        print("=== OpenRouter API Response ===")
+        print(f"Full response object: {response}\n")
+        print(f"Response type: {type(response)}\n")
+        print(f"Response choices: {response.choices}\n")
+        print(f"Message content: {response.choices[0].message.content}\n")
+        print(f"Usage info: {getattr(response, 'usage', 'No usage info')}")
+        print("===============================")
+        
+        modified_text = response.choices[0].message.content.strip()
+        
+        # Remove quotes if the model added them
+        if modified_text.startswith('"') and modified_text.endswith('"'):
+            modified_text = modified_text[1:-1]
+        
+        # Analyze the new sentiment
+        new_sentiment_analysis = analyze_sentiment(modified_text)
+        new_sentiment = new_sentiment_analysis['sentiment']
+        
+        # Determine success and changes
+        success = new_sentiment == target_sentiment
+        
+        # Create a summary of changes (simplified since we can't track word-by-word changes with LLM)
+        changes_made = [
+            f"Transformed from {original_sentiment} to {new_sentiment} sentiment",
+            "Used AI language model for natural text transformation"
+        ]
+        
+        if success:
+            message = f"Successfully transformed text to {target_sentiment}!"
+        else:
+            message = f"Transformed text from {original_sentiment} to {new_sentiment} (target was {target_sentiment})"
+        
+        return {
+            "original_text": text,
+            "modified_text": modified_text,
+            "target_sentiment": target_sentiment,
+            "original_sentiment": original_sentiment,
+            "new_sentiment": new_sentiment,
+            "changes_made": changes_made,
+            "success": success,
+            "message": message
+        }
+        
+    except Exception as e:
+        # Fallback to simple word replacement if API fails
+        return fallback_word_replacement(text, target_sentiment, original_sentiment, str(e))
+
+def fallback_word_replacement(text, target_sentiment, original_sentiment, error_message):
+    """Fallback method using simple word replacement if LLM fails"""
     
-    # Apply word replacements based on target sentiment
+    # Simple word mappings as fallback
+    positive_words = {
+        'bad': 'good', 'terrible': 'wonderful', 'awful': 'amazing', 
+        'hate': 'love', 'dislike': 'like', 'horrible': 'fantastic',
+        'disappointed': 'pleased', 'frustrated': 'satisfied', 
+        'angry': 'happy', 'sad': 'joyful', 'upset': 'delighted',
+        'worst': 'best', 'failed': 'succeeded', 'problem': 'opportunity'
+    }
+    
+    negative_words = {
+        'good': 'bad', 'wonderful': 'terrible', 'amazing': 'awful',
+        'love': 'hate', 'like': 'dislike', 'fantastic': 'horrible',
+        'pleased': 'disappointed', 'satisfied': 'frustrated',
+        'happy': 'angry', 'joyful': 'sad', 'delighted': 'upset',
+        'best': 'worst', 'succeeded': 'failed', 'opportunity': 'problem'
+    }
+    
+    neutral_words = {
+        'love': 'like', 'hate': 'dislike', 'amazing': 'okay',
+        'terrible': 'mediocre', 'wonderful': 'decent', 'awful': 'poor',
+        'fantastic': 'fine', 'horrible': 'average'
+    }
+    
+    # Select word map based on target sentiment
     if target_sentiment == "positive":
         word_map = positive_words
-        modifier_map = positive_modifiers
     elif target_sentiment == "negative":
-        word_map = negative_words  
-        modifier_map = negative_modifiers
-    else:  # neutral
+        word_map = negative_words
+    else:
         word_map = neutral_words
-        modifier_map = neutral_modifiers
     
-    # Replace words (case-insensitive)
-    words = modified_text.split()
+    # Apply simple replacements
+    modified_text = text
+    changes_made = [f"Fallback method used (API error: {error_message})"]
+    
+    words = text.split()
     new_words = []
     
     for word in words:
-        # Clean word of punctuation for matching
         clean_word = re.sub(r'[^\w]', '', word.lower())
-        original_word = word
-        
-        # Check if word needs replacement
         if clean_word in word_map:
-            # Preserve original case and punctuation
             replacement = word_map[clean_word]
             if word[0].isupper():
                 replacement = replacement.capitalize()
             
-            # Preserve punctuation
             punctuation = re.findall(r'[^\w]', word)
             if punctuation:
                 replacement += ''.join(punctuation)
             
             new_words.append(replacement)
-            changes_made.append(f"'{original_word}' → '{replacement}'")
+            changes_made.append(f"'{word}' → '{replacement}'")
         else:
             new_words.append(word)
     
     modified_text = ' '.join(new_words)
     
-    # Add sentiment modifiers if needed
-    if target_sentiment == "positive" and "very" not in modified_text.lower():
-        if "good" in modified_text.lower():
-            modified_text = modified_text.replace("good", "really good")
-            changes_made.append("Added 'really' for emphasis")
-        elif "nice" in modified_text.lower():
-            modified_text = modified_text.replace("nice", "really nice")
-            changes_made.append("Added 'really' for emphasis")
-    
-    # Adjust punctuation for sentiment
-    if target_sentiment == "positive":
-        if modified_text.endswith('.'):
-            modified_text = modified_text[:-1] + '!'
-            changes_made.append("Changed period to exclamation mark")
-    elif target_sentiment == "negative":
-        if modified_text.endswith('!'):
-            modified_text = modified_text[:-1] + '.'
-            changes_made.append("Changed exclamation to period")
-    
-    # Verify the change worked
+    # Analyze new sentiment
     new_sentiment = analyze_sentiment(modified_text)['sentiment']
+    success = new_sentiment == target_sentiment
     
     return {
         "original_text": text,
@@ -164,6 +227,6 @@ def moodify_text(text, target_sentiment):
         "original_sentiment": original_sentiment,
         "new_sentiment": new_sentiment,
         "changes_made": changes_made,
-        "success": new_sentiment == target_sentiment,
-        "message": f"Successfully transformed text to {target_sentiment}!" if new_sentiment == target_sentiment else f"Attempted transformation, but result is {new_sentiment}"
+        "success": success,
+        "message": f"Used fallback method. Result: {new_sentiment} sentiment"
     }
