@@ -4,7 +4,9 @@ import './App.css'
 function App() {
   const [text, setText] = useState('')
   const [analysis, setAnalysis] = useState(null)
+  const [moodifyResult, setMoodifyResult] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [moodifyLoading, setMoodifyLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const analyzeText = async () => {
@@ -15,6 +17,7 @@ function App() {
 
     setLoading(true)
     setError(null)
+    setMoodifyResult(null) // Clear previous moodify results
 
     try {
       const response = await fetch('http://localhost:8000/api/analyze-sentiment/', {
@@ -39,9 +42,48 @@ function App() {
     }
   }
 
+  const moodifyText = async (targetSentiment) => {
+    setMoodifyLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch('http://localhost:8000/api/moodify-text/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          text: text.trim(),
+          target_sentiment: targetSentiment
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setMoodifyResult(data)
+      } else {
+        setError(data.error || 'Failed to moodify text')
+      }
+    } catch (err) {
+      setError('Failed to connect to the server. Make sure the backend is running.')
+    } finally {
+      setMoodifyLoading(false)
+    }
+  }
+
+  const useMoodifiedText = () => {
+    if (moodifyResult && moodifyResult.modified_text) {
+      setText(moodifyResult.modified_text)
+      setMoodifyResult(null)
+      setAnalysis(null)
+    }
+  }
+
   const clearAnalysis = () => {
     setText('')
     setAnalysis(null)
+    setMoodifyResult(null)
     setError(null)
   }
 
@@ -178,6 +220,101 @@ Examples:
             <div className="analyzed-text">
               <h3>Analyzed Text</h3>
               <p>"{text}"</p>
+            </div>
+
+            {/* Moodify Section */}
+            <div className="moodify-section">
+              <h3>🎭 Moodify Your Text</h3>
+              <p>Transform your text to express a different sentiment:</p>
+              
+              <div className="moodify-buttons">
+                <button 
+                  onClick={() => moodifyText('positive')}
+                  disabled={moodifyLoading || analysis.sentiment === 'positive'}
+                  className="moodify-btn positive"
+                >
+                  {moodifyLoading ? '✨ Transforming...' : '😊 Make Positive'}
+                </button>
+                
+                <button 
+                  onClick={() => moodifyText('negative')}
+                  disabled={moodifyLoading || analysis.sentiment === 'negative'}
+                  className="moodify-btn negative"
+                >
+                  {moodifyLoading ? '✨ Transforming...' : '😞 Make Negative'}
+                </button>
+                
+                <button 
+                  onClick={() => moodifyText('neutral')}
+                  disabled={moodifyLoading || analysis.sentiment === 'neutral'}
+                  className="moodify-btn neutral"
+                >
+                  {moodifyLoading ? '✨ Transforming...' : '😐 Make Neutral'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Moodify Results */}
+        {moodifyResult && (
+          <div className="moodify-results">
+            <h2>🎭 Moodify Results</h2>
+            
+            <div className="transformation-card">
+              <div className="transformation-header">
+                <span className="transformation-title">
+                  {moodifyResult.success ? '✅ Success!' : '⚠️ Partial Success'}
+                </span>
+                <span className="transformation-message">
+                  {moodifyResult.message}
+                </span>
+              </div>
+
+              <div className="text-comparison">
+                <div className="text-before">
+                  <h4>Original Text ({moodifyResult.original_sentiment}):</h4>
+                  <p>"{moodifyResult.original_text}"</p>
+                </div>
+                
+                <div className="transformation-arrow">
+                  ⬇️ Transformed to {moodifyResult.target_sentiment} ⬇️
+                </div>
+                
+                <div className="text-after">
+                  <h4>Moodified Text ({moodifyResult.new_sentiment}):</h4>
+                  <p className={`moodified-text ${moodifyResult.new_sentiment}`}>
+                    "{moodifyResult.modified_text}"
+                  </p>
+                </div>
+              </div>
+
+              {moodifyResult.changes_made && moodifyResult.changes_made.length > 0 && (
+                <div className="changes-section">
+                  <h4>Changes Made:</h4>
+                  <ul className="changes-list">
+                    {moodifyResult.changes_made.map((change, index) => (
+                      <li key={index}>{change}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="moodify-actions">
+                <button 
+                  onClick={useMoodifiedText}
+                  className="use-moodified-btn"
+                >
+                  📝 Use This Text
+                </button>
+                
+                <button 
+                  onClick={() => setMoodifyResult(null)}
+                  className="dismiss-btn"
+                >
+                  ❌ Dismiss
+                </button>
+              </div>
             </div>
           </div>
         )}
