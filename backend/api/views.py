@@ -7,7 +7,7 @@ from rest_framework import status
 class SentimentAnalysisView(APIView):
     def post(self, request):
         user_text = request.data.get("text")
-        flask_url = "http://localhost:5000/predict"
+        flask_url = "http://localhost:5001/api/sentiment"
 
         try:
             flask_response = requests.post(flask_url, json={"text": user_text})

@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import AnalyzeSentimentView
+from .views import SentimentAnalysisView
 
 urlpatterns = [
-    path('analyze-sentiment/', AnalyzeSentimentView.as_view(), name='analyze'),
+    path('analyze-sentiment/', SentimentAnalysisView.as_view(), name='analyze'),
 ]
