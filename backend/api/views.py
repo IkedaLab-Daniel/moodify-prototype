@@ -20,7 +20,7 @@ class MoodifyTextView(APIView):
     def post(self, request):
         user_text = request.data.get("text")
         target_sentiment = request.data.get("target_sentiment")
-        flask_url = "http://localhost:5000/moodify"
+        flask_url = "http://127.0.0.1:5000/moodify"
 
         try:
             flask_response = requests.post(flask_url, json={
